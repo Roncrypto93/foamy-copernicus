@@ -21,14 +21,26 @@ def wave():
     except (TypeError, ValueError):
         return jsonify({"error": "INVALID_PARAMS", "message": "lat e lon richiesti come numeri"}), 400
 
+    # Parametro opzionale "date" (YYYY-MM-DD) per interrogare un giorno futuro
+    # entro l'orizzonte di forecast del dataset anfc (di norma alcuni giorni
+    # avanti). Senza il parametro il comportamento resta l'istante attuale,
+    # invariato rispetto a prima.
+    target = datetime.datetime.utcnow()
+    date_param = request.args.get("date")
+    if date_param:
+        try:
+            target_date = datetime.datetime.strptime(date_param, "%Y-%m-%d").date()
+            target = datetime.datetime.combine(target_date, datetime.time(12, 0))
+        except ValueError:
+            return jsonify({"error": "INVALID_PARAMS", "message": "date deve essere in formato YYYY-MM-DD"}), 400
+
     try:
         import copernicusmarine
     except ImportError:
         return jsonify({"error": "MISSING_DEPENDENCY", "message": "copernicusmarine non installato"}), 500
 
-    now = datetime.datetime.utcnow()
-    start = now - datetime.timedelta(hours=3)
-    end = now + datetime.timedelta(hours=3)
+    start = target - datetime.timedelta(hours=3)
+    end = target + datetime.timedelta(hours=3)
 
     try:
         ds = copernicusmarine.open_dataset(
@@ -42,7 +54,7 @@ def wave():
             end_datetime=end.isoformat(),
             coordinates_selection_method="nearest",
         )
-        point = ds.sel(time=now, method="nearest")
+        point = ds.sel(time=target, method="nearest")
         point = point.squeeze()
 
         result = {
