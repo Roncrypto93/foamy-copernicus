@@ -42,7 +42,8 @@ def wave():
             end_datetime=end.isoformat(),
             coordinates_selection_method="nearest",
         )
-        point = ds.sel(time=now, method="nearest")
+       point = ds.sel(time=now, method="nearest")
+        point = point.squeeze()  # rimuove le dimensioni residue (lat/lon/depth) di lunghezza 1
         result = {
             "source": "copernicus-marine-cmems",
             "datasetId": DATASET_ID,
