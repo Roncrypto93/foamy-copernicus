@@ -81,29 +81,35 @@ def fetch_nearest_valid_wave(lat, lon, target, start, end):
             start_datetime=start.isoformat(),
             end_datetime=end.isoformat(),
         )
-        snapshot = ds.sel(time=target, method="nearest").squeeze()
+        try:
+            snapshot = ds.sel(time=target, method="nearest").squeeze()
 
-        height = snapshot["VHM0"].values
-        if height.ndim == 0:
-            # Riquadro troppo piccolo per contenere più di una cella: la
-            # cella unica è terra (NaN) o mare (valida), nessuna scelta da fare.
-            if not np.isnan(height):
-                return _point_result(snapshot)
-            continue
+            height = snapshot["VHM0"].values
+            if height.ndim == 0:
+                # Riquadro troppo piccolo per contenere più di una cella: la
+                # cella unica è terra (NaN) o mare (valida), nessuna scelta da fare.
+                if not np.isnan(height):
+                    return _point_result(snapshot)
+                continue
 
-        valid = ~np.isnan(height)
-        if not valid.any():
-            continue
+            valid = ~np.isnan(height)
+            if not valid.any():
+                continue
 
-        lats = snapshot["latitude"].values
-        lons = snapshot["longitude"].values
-        lon_grid, lat_grid = np.meshgrid(lons, lats)
-        dist_sq = (lat_grid - lat) ** 2 + (lon_grid - lon) ** 2
-        dist_sq = np.where(valid, dist_sq, np.inf)
-        flat_idx = np.argmin(dist_sq)
-        iy, ix = np.unravel_index(flat_idx, dist_sq.shape)
-        nearest = snapshot.isel(latitude=iy, longitude=ix)
-        return _point_result(nearest)
+            lats = snapshot["latitude"].values
+            lons = snapshot["longitude"].values
+            lon_grid, lat_grid = np.meshgrid(lons, lats)
+            dist_sq = (lat_grid - lat) ** 2 + (lon_grid - lon) ** 2
+            dist_sq = np.where(valid, dist_sq, np.inf)
+            flat_idx = np.argmin(dist_sq)
+            iy, ix = np.unravel_index(flat_idx, dist_sq.shape)
+            nearest = snapshot.isel(latitude=iy, longitude=ix).load()
+            return _point_result(nearest)
+        finally:
+            # Libera subito la memoria del dataset: su hosting free-tier a
+            # risorse limitate, tenerne aperti più d'uno per richiesta
+            # (un tentativo per ogni raggio) esaurisce facilmente la RAM.
+            ds.close()
 
     return None
 
