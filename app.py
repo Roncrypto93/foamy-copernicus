@@ -178,7 +178,7 @@ def tide():
         return jsonify({"error": "MISSING_DEPENDENCY", "message": "copernicusmarine non installato"}), 500
 
     try:
-        result = fetch_nearest_valid_tide(lat, lon, midday_utc, day_start_utc, day_end_utc)
+        result = fetch_nearest_valid_tide(lat, lon, midday_utc, day_start_utc, day_end_utc, target_date)
         if result is None:
             return jsonify({
                 "error": "NO_SEA_DATA_NEARBY",
@@ -190,7 +190,7 @@ def tide():
         return jsonify({"error": "CMEMS_FETCH_ERROR", "message": str(e)}), 502
 
 
-def fetch_nearest_valid_tide(lat, lon, midday_utc, day_start_utc, day_end_utc):
+def fetch_nearest_valid_tide(lat, lon, midday_utc, day_start_utc, day_end_utc, target_date):
     """
     Come fetch_nearest_valid_wave, ma invece di un solo istante estrae
     l'intera serie oraria del giorno per la cella di mare valida più vicina.
@@ -230,7 +230,7 @@ def fetch_nearest_valid_tide(lat, lon, midday_utc, day_start_utc, day_end_utc):
                 iy, ix = np.unravel_index(flat_idx, dist_sq.shape)
                 series = ds["zos"].isel(latitude=iy, longitude=ix)
 
-            hourly = _hourly_series(series.load())
+            hourly = _hourly_series(series.load(), target_date)
             if not hourly:
                 continue
             return {
@@ -244,11 +244,14 @@ def fetch_nearest_valid_tide(lat, lon, midday_utc, day_start_utc, day_end_utc):
     return None
 
 
-def _hourly_series(series):
+def _hourly_series(series, target_date):
     """Converte la serie oraria (tempi UTC del dataset) in coppie
     {time: "HH:MM", level: metri}, con l'orario espresso in Europe/Rome —
     così sia il matching lato Node sia la visualizzazione lato utente usano
-    la stessa ora "di parete" percepita, senza dover fare conversioni altrove."""
+    la stessa ora "di parete" percepita, senza dover fare conversioni altrove.
+    Il margine di ±1h nella query (per sicurezza sui bordi) può includere
+    punti del giorno prima/dopo: qui si scartano, tenendo solo le ore che
+    cadono nel giorno di calendario Europe/Rome richiesto."""
     import numpy as np
 
     times = series["time"].values
@@ -261,6 +264,8 @@ def _hourly_series(series):
             t.astype("datetime64[s]").astype(int), tz=datetime.timezone.utc
         )
         dt_local = dt_utc.astimezone(ROME_TZ)
+        if dt_local.date() != target_date:
+            continue
         out.append({"time": dt_local.strftime("%H:%M"), "level": round(float(v), 2)})
     return out
 
