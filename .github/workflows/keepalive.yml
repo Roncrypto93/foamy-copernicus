@@ -1,0 +1,22 @@
+name: Keep foamy-copernicus awake
+
+# Il piano free di Render addormenta il servizio dopo 15 minuti di
+# inattività: la prima chiamata dopo il risveglio impiega 15-45s in più
+# (oltre al tempo di boot di Flask), il che rallenta /wave e /tide su
+# foamy-backend. Un ping ogni 10 minuti tiene il servizio sveglio senza
+# alcun costo: il repo è pubblico, quindi i minuti di GitHub Actions sono
+# illimitati (nessuna quota da monitorare).
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /health
+        run: |
+          curl -sf -o /dev/null -w "HTTP %{http_code}\n" https://foamy-copernicus.onrender.com/health \
+            || echo "Ping non riuscito (probabile risveglio a freddo in corso, non è un errore critico)"
